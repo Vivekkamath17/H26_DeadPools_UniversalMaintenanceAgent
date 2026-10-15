@@ -99,7 +99,7 @@ class DiagnosticAgent:
     _GROQ_DEFAULT_MODEL   = "llama3-8b-8192"
     _OLLAMA_DEFAULT_URL   = "http://localhost:11434"
     _OLLAMA_DEFAULT_MODEL = "llama3:8b"
-    _GEMINI_DEFAULT_MODEL = "gemini-2.5-flash"   # fast + capable; override with GEMINI_MODEL
+    _GEMINI_DEFAULT_MODEL = "gemini-flash-lite-latest"   # fast + resilient; override with GEMINI_MODEL
 
     def __init__(self) -> None:
         self._gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
@@ -210,33 +210,49 @@ class DiagnosticAgent:
                 full_prompt += "[SYSTEM INSTRUCTIONS]\n" + "\n".join(system_parts) + "\n\n"
             full_prompt += "\n".join(user_parts)
 
-            log(f"Calling Gemini [{self._gemini_model}] ...")
-            max_retries = 3
+            candidate_models = [self._gemini_model]
+            for fb in ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-3.5-flash-lite"]:
+                if fb not in candidate_models:
+                    candidate_models.append(fb)
+
             import time as _time
-            for attempt in range(1, max_retries + 1):
-                try:
-                    response = client.models.generate_content(
-                        model=self._gemini_model,
-                        contents=full_prompt,
-                        config=genai_types.GenerateContentConfig(
-                            temperature=0.2,
-                            max_output_tokens=8192,
-                            response_mime_type="application/json",
-                        ),
-                    )
-                    return response.text or ""
-                except Exception as call_exc:
-                    err_msg = str(call_exc)
-                    if ("503" in err_msg or "429" in err_msg or "UNAVAILABLE" in err_msg) and attempt < max_retries:
-                        delay = attempt * 3
-                        log(f"Gemini {self._gemini_model} busy ({err_msg[:40]}...). Retrying in {delay}s (attempt {attempt}/{max_retries}) ...", "yellow")
-                        _time.sleep(delay)
-                    else:
-                        raise call_exc
+            max_retries = 2
+
+            for model_candidate in candidate_models:
+                log(f"Calling Gemini [{model_candidate}] ...")
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        response = client.models.generate_content(
+                            model=model_candidate,
+                            contents=full_prompt,
+                            config=genai_types.GenerateContentConfig(
+                                temperature=0.2,
+                                max_output_tokens=8192,
+                                response_mime_type="application/json",
+                            ),
+                        )
+                        if response.text:
+                            self._gemini_model = model_candidate
+                            return response.text
+                    except Exception as call_exc:
+                        err_msg = str(call_exc)
+                        if ("503" in err_msg or "429" in err_msg or "UNAVAILABLE" in err_msg) and attempt < max_retries:
+                            delay = attempt * 2
+                            log(f"Gemini {model_candidate} busy ({err_msg[:40]}...). Retrying in {delay}s ...", "yellow")
+                            _time.sleep(delay)
+                        elif "404" in err_msg or "NOT_FOUND" in err_msg or "no longer available" in err_msg:
+                            log(f"Gemini {model_candidate} not available on this tier. Trying next model...", "yellow")
+                            break
+                        else:
+                            log(f"Gemini {model_candidate} error: {err_msg[:60]}. Trying next candidate...", "yellow")
+                            break
+
+            log("All Gemini candidate models failed - switching to heuristic.", "yellow")
+            self._backend = "heuristic"
             return self._heuristic_response()
 
         except Exception as exc:
-            log(f"Gemini call failed: {exc} - switching to heuristic.", "red")
+            log(f"Gemini client initialization failed: {exc} - switching to heuristic.", "red")
             self._backend = "heuristic"
             return self._heuristic_response()
 
