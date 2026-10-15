@@ -1,438 +1,364 @@
 # Universal Maintenance Agent (UMA)
-
-> **Enterprise-Grade Autonomous Multi-Agent Maintenance System**  
-> Agent Skills Open Standard v1.0.0 · Track 2 · Hacktoberfest 2026
-
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.135-green?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev/)
-[![Gemini 2.5](https://img.shields.io/badge/LLM-Gemini%202.5%20Flash-orange?logo=google)](https://aistudio.google.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+> Autonomous, verified, self-healing software maintenance powered by multi-model AI and deterministic sandboxing.
 
 ---
 
-## 🌟 What It Does
+## 1. Problem and Solution Overview
 
-The **Universal Maintenance Agent (UMA)** autonomously audits any software repository and produces a **Dependency Exit Capsule** — a verified, schema-validated JSON + Markdown report separating:
+### Problem Statement
+Modern software engineering teams spend up to 42% of their development time maintaining legacy code, triaging flaky tests, migrating deprecated APIs, and handling dependency vulnerabilities. Traditional automated remediation tools suffer from critical shortcomings:
+- **Hallucinated fixes**: Automated code generation frequently creates syntactically valid code that fails runtime assertions or breaks downstream semantics.
+- **Blind PR submissions**: Developers distrust automated pull requests because there is no clear distinction between verified facts and AI-generated guesswork.
+- **Fragile single-shot repair**: When an initial patch fails CI or regression tests, standard bots abandon the attempt rather than analyzing test failures and self-healing.
+- **Vendor lock-in and high cost**: Strict reliance on proprietary APIs makes full-repo maintenance cost-prohibitive for large codebases.
 
-| Label | Meaning |
-|---|---|
-| 🟢 **EXECUTED** | Empirically proven by running actual test suites in a sandbox |
-| 🔵 **OBSERVED FACT** | Deterministically extracted from manifests/AST (zero LLM) |
-| 🟡 **AI ADVISORY** | Proposed by Gemini/Groq via Chain-of-Verification reasoning |
-| ⬜ **UNVERIFIED** | Sandbox was skipped — treat as advisory only |
+### Solution Overview
+The **Universal Maintenance Agent (UMA)** is an autonomous, agentic maintenance pipeline that inspects repositories, diagnoses root causes using Chain-of-Verification (CoV), executes candidate patches inside deterministic sandboxes with automated self-healing loops, and compiles verifiable **Maintenance Capsules** with explicit provenance tagging.
 
-Works on **Python, Node.js, Go, Rust, Java** and any Git-hosted repository.
+#### Provenance and Trust Architecture
+UMA classifies every generated insight and artifact into a strict 4-tier provenance hierarchy:
 
----
+| Provenance Tier | Tag | Meaning & Guarantee |
+| :--- | :--- | :--- |
+| **EXECUTED** | [EXECUTED] | Deterministically executed and verified by test runners in the sandbox. Zero hallucination risk. |
+| **OBSERVED FACT** | [OBSERVED FACT] | Extracted directly from AST analysis, git commits, pyproject.toml, or lockfiles. |
+| **AI ADVISORY** | [AI ADVISORY] | Synthesized by an LLM via verified reasoning (CoV); requires human review before production deployment. |
+| **UNVERIFIED** | [UNVERIFIED] | Heuristic fallback output generated when LLM or sandbox execution is unavailable or inconclusive. |
 
-## 🏗️ Multi-Agent Architecture
-
-```mermaid
-flowchart TD
-    Target[Target Repository / Git URL] --> P1[Phase 1: Deep Inspector & Tree-Sitter AST]
-    P1 -->|Deterministic ObservedFacts| P2[Phase 2: Diagnostic Agent CoV]
-    P2 -->|Candidate Unified Diffs| P3{Phase 3: Sandbox Verification}
-    P3 -->|Tests Pass| P4[Phase 4: Capsule Compiler]
-    P3 -->|Tests Fail| P3R[Self-Healing Reflection Loop up to 3x]
-    P3R -->|Terminal Failure| P3Rollback[Git Rollback & Report Gap]
-    P3Rollback --> P4
-    P4 -->|Exit Capsule JSON & MD| P5[Phase 5: Interactive PR Agent]
-    P5 -->|User Confirms y/N| PR[Git Branch + Commit + GitHub PR]
-    P5 -->|User Declines| Abort[Clean Abort - Zero Remote Changes]
-```
-
-| Phase | Agent | Role |
-|---|---|---|
-| **1** | `DeepInspectorAgent` + `TreeSitterInspector` | Static analysis, manifest parsing, AST import/error extraction — **zero LLM** |
-| **2** | `DiagnosticAgent` | Gemini 2.5 Flash / Groq / Ollama with Chain-of-Verification reasoning |
-| **3** | `SandboxAgent` | Applies patches, runs `pytest`/`npm test`/`cargo test`, self-heals up to 3× |
-| **4** | `CapsuleCompiler` | JSON Schema validation + Jinja2 Markdown report |
-| **5** | `InteractivePRAgent` | `[y/N]` gate → Git branch + commit + GitHub PR |
+#### Key Innovations
+- **Chain-of-Verification (CoV) Diagnostic Engine**: Deconstructs issues into underlying hypotheses, verifies them against code evidence, and rejects hallucinations prior to patch synthesis.
+- **Deterministic Sandbox & Self-Healing Loop**: Executes pytest suites inside isolated subprocesses. If a patch fails tests, the sandbox feeds the exact traceback back into the model to refine and heal the patch (up to 3 iterations).
+- **Interactive Pull Request Synthesizer**: Produces production-ready GitHub PR descriptions with line-by-line diffs, verification receipts, and risk-weighted summaries.
+- **Multi-Model Provider Hierarchy**: Seamlessly cascades from high-capability reasoning models (Google Gemini 2.5 Flash) to ultra-fast inference (Groq LLaMA-3.1-70B) down to local offline models (Ollama LLaMA 3 8B) or local heuristics.
 
 ---
 
-## 📋 Prerequisites
+## 2. Setup Instructions
 
-| Requirement | Version | Notes |
-|---|---|---|
-| **Python** | 3.10+ | `python --version` |
-| **Node.js** | 18+ | `node --version` — for the web frontend |
-| **npm** | 9+ | `npm --version` |
-| **Git** | any | Must be in PATH |
-| **Gemini API Key** | — | Free at [aistudio.google.com](https://aistudio.google.com/app/apikey) |
-| **GitHub Token** | — | Optional — only for Phase 5 PR creation |
+### Prerequisites
+| Tool / Runtime | Required Version | Description |
+| :--- | :--- | :--- |
+| **Python** | 3.10+ | Core agent runtime and backend service |
+| **Node.js** | 18.0+ | Frontend web dashboard build toolchain |
+| **Git** | 2.30+ | Repository cloning and VCS operations |
+| **Ollama** *(Optional)* | 0.1.30+ | Local offline LLM execution |
 
----
+### Step-by-Step Installation
 
-## ⚡ Quick Setup (Recommended — One-Command Start)
+#### 1. Clone the Repository
+`ash
+git clone git@github.com:Vivekkamath17/H26_DeadPools_UniversalMaintenanceAgent.git
+cd H26_DeadPools_UniversalMaintenanceAgent
+`
 
-### Step 1 — Clone the repository
-
-```powershell
-git clone https://github.com/your-username/universal-maintenance-agent.git
-cd universal-maintenance-agent
-```
-
-### Step 2 — Create & activate a Python virtual environment
-
-```powershell
-# Create the venv
+#### 2. Configure Python Virtual Environment
+`ash
+# Create virtual environment
 python -m venv .venv
 
-# Activate (Windows PowerShell)
+# Activate on Windows PowerShell:
 .venv\Scripts\Activate.ps1
 
-# Activate (Windows CMD)
-.venv\Scripts\activate.bat
-
-# Activate (Linux / macOS)
+# Activate on Linux / macOS:
 source .venv/bin/activate
-```
+`
 
-> **Tip:** You should see `(.venv)` in your prompt after activation.
-
-### Step 3 — Install Python dependencies
-
-```powershell
+#### 3. Install Python Dependencies
+Install both the root package (agent pipeline) and backend service dependencies:
+`ash
+# Install core pipeline dependencies
 pip install -r requirements.txt
-```
 
-### Step 4 — Configure environment variables
+# Install backend dependencies
+pip install -r backend/requirements.txt
+`
 
-```powershell
-# Copy the template
-copy .env.example .env        # Windows
-cp .env.example .env          # Linux / macOS
-```
+#### 4. Configure Environment Variables
+Copy the template configuration and supply your API keys:
+`ash
+cp .env.example .env
+`
 
-Now open `.env` and fill in your keys:
-
-```ini
-# ── REQUIRED ──────────────────────────────────────────────────────────────────
-# Google Gemini API key (free tier is sufficient)
-# Get it from: https://aistudio.google.com/app/apikey
-GEMINI_API_KEY=AIzaSy_YOUR_KEY_HERE
-
-# Model to use (do not change unless you have quota for a larger model)
+Open .env in your editor and configure the desired LLM keys:
+`env
+# Primary LLM: Google Gemini
+GEMINI_API_KEY=AIzaSy_YOUR_GEMINI_KEY_HERE
 GEMINI_MODEL=gemini-2.5-flash
 
-# ── OPTIONAL: Groq (faster open-weight fallback) ──────────────────────────────
-# Get it from: https://console.groq.com/keys
-GROQ_API_KEY=gsk_YOUR_KEY_HERE
+# Secondary LLM (Fallback): Groq Cloud
+GROQ_API_KEY=gsk_YOUR_GROQ_KEY_HERE
 GROQ_MODEL=llama-3.1-70b-versatile
 
-# ── OPTIONAL: Local Ollama ─────────────────────────────────────────────────────
-# First run: ollama serve && ollama pull llama3:8b
-OLLAMA_BASE_URL=http://localhost:11434
+# Tertiary LLM (Local / Offline): Ollama
 OLLAMA_MODEL=llama3:8b
+OLLAMA_BASE_URL=http://localhost:11434
 
-# ── OPTIONAL: GitHub PR Agent (Phase 5 only) ──────────────────────────────────
-# Create a PAT at: https://github.com/settings/tokens
-# Required scopes: repo (full)
-GITHUB_TOKEN=ghp_YOUR_TOKEN_HERE
+# Sandbox Safety & Execution Limits
+SANDBOX_TIMEOUT_SECONDS=60
+MAX_SELF_HEAL_ATTEMPTS=3
 
-# ── General ───────────────────────────────────────────────────────────────────
-DEBUG=0
-```
+# Target Repository under Maintenance
+TARGET_REPO_PATH=.
+`
 
-### Step 5 — Install frontend dependencies
-
-```powershell
+#### 5. Install Frontend Dashboard Dependencies
+`ash
 cd frontend
 npm install
 cd ..
-```
+`
 
 ---
 
-## 🚀 Running the Project
+## 3. Usage Instructions
 
-### Option A — One-Click Start (PowerShell)
-
-Starts **both** the FastAPI backend and Vite frontend simultaneously and opens your browser:
-
-```powershell
+### Option A: One-Click Startup (Windows PowerShell)
+The project includes a launch script that initializes both the FastAPI backend and the Vite frontend:
+`powershell
 .\start.ps1
-```
+`
+- Backend API will be available at: http://localhost:8000
+- API Interactive Swagger docs: http://localhost:8000/docs
+- Frontend Web Dashboard: http://localhost:5173
 
-- **Backend API:** http://localhost:8000
-- **Frontend UI:** http://localhost:5173
+### Option B: Manual Multi-Terminal Startup
 
----
-
-### Option B — Manual (Two Terminals)
-
-**Terminal 1 — Python Backend (FastAPI)**
-
-```powershell
-# Make sure your .venv is active first!
-.venv\Scripts\Activate.ps1
-
+**Terminal 1 — Backend API Server:**
+`ash
 cd backend
 python -m uvicorn main:app --reload --port 8000
-```
+`
 
-Expected output:
-```
-INFO:     Uvicorn running on http://127.0.0.1:8000
-INFO:     Application startup complete.
-```
-
-**Terminal 2 — React Frontend (Vite)**
-
-```powershell
+**Terminal 2 — Frontend Application:**
+`ash
 cd frontend
 npm run dev
-```
+`
 
-Expected output:
-```
-  VITE v8.x ready in 457ms
-  ➜  Local:   http://localhost:5173/
-```
+### Option C: CLI Mode (Headless Pipeline Execution)
+You can invoke the Universal Maintenance Agent directly from the command line on any local target repository:
 
-Open **http://localhost:5173** in your browser.
+`ash
+# Run full maintenance pipeline on a target repository
+python -m skills.universal_maintainer.cli --repo /path/to/target-repo
 
----
+# Run with custom budget or iteration caps
+python -m skills.universal_maintainer.cli --repo /path/to/target-repo --max-heal 3 --timeout 90
 
-### Option C — CLI Only (No Frontend)
+# Generate capsule output only (dry run without applying git changes)
+python -m skills.universal_maintainer.cli --repo /path/to/target-repo --dry-run --output ./capsule.json
+`
 
-Run the agent directly from the command line without starting the web UI:
+#### CLI Flags Reference
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| --repo | Path | . | Target directory of the repository to inspect and maintain |
+| --max-heal | Int | 3 | Maximum number of self-healing compile-test-repair iterations |
+| --timeout | Int | 60 | Execution timeout in seconds per sandbox test run |
+| --dry-run | Flag | False | Run analysis and tests without writing patches to disk |
+| --output | Path | None | Path to save the compiled JSON MaintenanceCapsule |
 
-```powershell
-# Activate your venv first
-.venv\Scripts\Activate.ps1
-
-# Basic audit on a remote GitHub repository
-python main.py --repo https://github.com/rishrek/LinkWatch
-
-# Fast read-only audit (skips sandbox, skips PR prompt)
-python main.py --repo https://github.com/rishrek/LinkWatch --skip-sandbox --no-pr
-
-# Audit a local directory
-python main.py --repo C:\path\to\your\project
-
-# Auto-confirm PR creation (for CI/CD pipelines)
-python main.py --repo https://github.com/rishrek/LinkWatch --auto-pr
-
-# Custom output directory
-python main.py --repo https://github.com/rishrek/LinkWatch --output ./my_audit
-```
-
-### CLI Flags Reference
-
-| Flag | Description | Default |
-|---|---|---|
-| `--repo` / `-r` | **(Required)** GitHub URL or local path | — |
-| `--output` / `-o` | Directory to save capsule files | `./output` |
-| `--skip-sandbox` | Skip patch application & test runs | `False` |
-| `--no-pr` | Disable interactive PR creation prompt | `False` |
-| `--auto-pr` | Auto-confirm PR without `[y/N]` prompt | `False` |
-| `--json-only` | Write only JSON, skip Markdown report | `False` |
+### Using the Web Dashboard
+1. Open http://localhost:5173 in your browser.
+2. Enter the absolute path to your target repository in the repository input box.
+3. Click **Start Maintenance Run**.
+4. Monitor the live pipeline execution across 5 dedicated view tabs:
+   - **Overview**: Stage progression, executive summary, health scores, and timing breakdown.
+   - **Patches & Diffs**: Interactive unified diff viewer with line numbers and patch rationales.
+   - **Verification & Tests**: Sandbox execution trace, pytest stdout/stderr, and self-healing log.
+   - **Risk Analysis**: Heatmap of blast radius, breaking change risks, and dependency impacts.
+   - **Pull Request Preview**: GitHub-ready markdown PR description ready for export.
 
 ---
 
-## 🖥️ Using the Web UI
+## 4. Architecture
 
-1. Open **http://localhost:5173**
-2. Paste any GitHub repository URL (e.g. `https://github.com/rishrek/LinkWatch`)
-3. Choose your LLM provider (Gemini recommended)
-4. Toggle **Skip Sandbox** on/off (on = fast read-only audit)
-5. Click **Run Maintenance Audit**
+### High-Level System Architecture
 
-The dashboard shows:
-- **Live Agent Log** — real-time SSE stream from all 5 agents
-- **Verdict Banner** — Verified / Partially Verified / Not Verified / Failed
-- **Trust Meter** — breakdown of Executed vs Observed vs AI Advisory claims
-- **Risks tab** — AST syntax errors (empirical) + AI risk indicators
-- **Patches tab** — collapsible unified diffs with status badges
-- **Tests tab** — sandbox execution results, stdout/stderr tails
-- **Raw JSON tab** — full Dependency Exit Capsule for download
+`
++-----------------------------------------------------------------------------------+
+|                            UMA Web Dashboard (React 19)                           |
+|       Overview   |   Patches & Diffs   |   Sandbox Logs   |   PR Generator        |
++-----------------------------------------+-----------------------------------------+
+                                          | HTTP / SSE
++-----------------------------------------v-----------------------------------------+
+|                              FastAPI Backend Server                               |
+|        /api/runs   |   /api/runs/{id}   |   /api/capsules   |   /api/models       |
++-----------------------------------------+-----------------------------------------+
+                                          | Invokes
++-----------------------------------------v-----------------------------------------+
+|                         UNIVERSAL MAINTENANCE AGENT PIPELINE                      |
+|                                                                                   |
+|  [Phase 1] Deep Inspector Agent                                                   |
+|    |-> Git commit history, AST parse, flake8/ruff, pytest status, dep graph       |
+|    v                                                                              |
+|  [Phase 2] Diagnostic Agent (Chain-of-Verification)                               |
+|    |-> Failure cluster analysis, hypothesis verification, verified patch proposal |
+|    v                                                                              |
+|  [Phase 3] Sandbox & Self-Healing Agent                                           |
+|    |-> Isolated test execution -> Pass? -> Proceed                                |
+|    |     |                                                                        |
+|    |     +-> Fail -> Feedback loop -> Re-prompt LLM -> Retry (<= 3 iterations)    |
+|    v                                                                              |
+|  [Phase 4] Capsule Compiler                                                       |
+|    |-> Merges test receipts, patch diffs, and provenance tags into signed capsule |
+|    v                                                                              |
+|  [Phase 5] Interactive PR Agent                                                   |
+|    |-> Builds verified markdown PR description, test logs, and blast radius       |
++-----------------------------------------+-----------------------------------------+
+                                          |
+                     +--------------------+--------------------+
+                     |                     |                    |
+                     v                     v                    v
+          +--------------------+ +-------------------+ +-----------------+
+          | Google Gemini API  | | Groq Cloud LLaMA  | | Ollama (Local)  |
+          |  (2.5 Flash / Pro) | |   (3.1-70B Vers)  | |   (LLaMA 3 8B)  |
+          +--------------------+ +-------------------+ +-----------------+
+`
 
-**Export options:**
-- Download raw `dependency_exit_capsule.json`
-- Open self-contained HTML report in a new tab
-- Copy PR description to clipboard
+### 5-Phase Agent Workflow
+1. **DeepInspectorAgent**: Analyzes the repository structure, discovers unit tests (pytest), extracts error patterns from logs, inspects dependencies in pyproject.toml or 
+equirements.txt, and generates an initial inspection report.
+2. **DiagnosticAgent**: Implements **Chain-of-Verification (CoV)**:
+   - Formulates primary failure hypotheses.
+   - Executes verification questions against code evidence.
+   - Generates unified diff patches with explicit rationale and confidence metrics.
+3. **SandboxAgent**:
+   - Creates a temporary working mirror or applies candidate patches in an isolated execution sandbox.
+   - Runs deterministic test commands (pytest -v).
+   - If tests fail, captures the failure stdout/stderr, reformulates the issue, and triggers **Self-Healing** (up to 3 attempts).
+4. **CapsuleCompiler**:
+   - Aggregates all observed facts, execution traces, diffs, and AI advisories into a single standardized MaintenanceCapsule JSON artifact.
+   - Tags each datum with its definitive provenance badge ([EXECUTED], [OBSERVED FACT], [AI ADVISORY], [UNVERIFIED]).
+5. **InteractivePRAgent**:
+   - Converts the capsule into a developer-facing Pull Request with summaries, risk matrices, before-and-after behavior descriptions, and reproducible sandbox logs.
 
----
-
-## 🔑 API Keys — Where to Get Them
-
-### Gemini API Key (Required)
-
-1. Go to [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
-2. Sign in with your Google account
-3. Click **Create API key**
-4. Copy the key (starts with `AIzaSy...`)
-5. Paste into `.env` as `GEMINI_API_KEY=AIzaSy...`
-
-> ✅ The free tier is sufficient — 15 RPM / 1M tokens per day.
-
-### Groq API Key (Optional)
-
-1. Go to [https://console.groq.com/keys](https://console.groq.com/keys)
-2. Create an account and generate a key (starts with `gsk_...`)
-3. Paste into `.env` as `GROQ_API_KEY=gsk_...`
-
-### GitHub Personal Access Token (Optional — Phase 5 only)
-
-Only needed if you want the PR Agent to automatically open pull requests.
-
-1. Go to [https://github.com/settings/tokens](https://github.com/settings/tokens)
-2. Click **Generate new token (classic)**
-3. Select scope: ✅ **repo** (full control)
-4. Copy and paste into `.env` as `GITHUB_TOKEN=ghp_...`
-
----
-
-## 📦 Output Artifacts
-
-Every run saves two files to `output/` (or your `--output` directory):
-
-```
-output/
-├── dependency_exit_capsule.json    ← Machine-readable, schema-validated
-└── dependency_exit_capsule.md      ← Human-readable Markdown report
-```
-
-The JSON capsule has 10 standard fields:
-
-```jsonc
-{
-  "maintenance_problem_identified": "...",          // Summary
-  "relevant_dependency_or_repo_details": { ... },   // 🔵 OBSERVED FACT
-  "risk_indicators": [ "..." ],                     // 🟡 AI ADVISORY
-  "usage_locations": [ "file.py:42" ],              // 🔵 OBSERVED FACT (AST)
-  "ai_generated_analysis_or_recommendations": "...",// 🟡 AI ADVISORY
-  "proposed_changes_or_maintenance_approach": "...",// 🟡 AI ADVISORY (diffs)
-  "suggested_tests_or_verification_steps": [ "..." ],
-  "executed_test_results": {                        // 🟢 EXECUTED (empirical)
-    "command": "pytest",
-    "exit_code": 0,
-    "success": true,
-    "attempts": 1,
-    ...
-  },
-  "compatibility_or_maintenance_gaps": [ "..." ],
-  "unresolved_concerns_and_limitations": [ "..." ]
-}
-```
+### Key Design Decisions
+- **Isolation over In-Place Mutation**: Candidate patches are validated in isolated environments before being committed to source control.
+- **Fail-Soft LLM Fallback**: If Gemini rate limits or network failures occur, the pipeline automatically falls back to Groq, then Ollama, and finally deterministic rule-based heuristics.
+- **Strict Provenance Separation**: LLM commentary is strictly demarcated from verified test runner outputs to prevent developer confusion.
 
 ---
 
-## 📂 Full Project Structure
+## 5. Dependencies
 
-```
-newer_hacktober/
-│
-├── .env                                  ← Your private config (not committed)
-├── .env.example                          ← Configuration template
-├── .gitignore
-├── requirements.txt                      ← Root Python deps (CLI usage)
-├── main.py                               ← CLI entry point
-├── start.ps1                             ← One-click start (backend + frontend)
-├── README.md                             ← This file
-│
-├── backend/
-│   ├── main.py                           ← FastAPI app (SSE, REST, HTML export)
-│   └── requirements.txt                  ← Backend-specific Python deps
-│
-├── frontend/
-│   ├── src/
-│   │   ├── api/index.ts                  ← Typed API + SSE subscription hook
-│   │   ├── components/
-│   │   │   ├── Badge.tsx                 ← Provenance color badges
-│   │   │   ├── AgentStepper.tsx          ← Live 5-phase pipeline stepper
-│   │   │   ├── LogConsole.tsx            ← Auto-scroll SSE log stream
-│   │   │   ├── VerdictBanner.tsx         ← Sticky 4-state trust verdict
-│   │   │   ├── TrustMeter.tsx            ← Claim provenance bar chart
-│   │   │   ├── PatchViewer.tsx           ← Collapsible unified diff viewer
-│   │   │   ├── RiskList.tsx              ← AST errors + AI risk indicators
-│   │   │   ├── TestMatrix.tsx            ← Sandbox execution result table
-│   │   │   └── ExportBar.tsx             ← JSON / HTML / PR description export
-│   │   ├── pages/
-│   │   │   ├── Launch.tsx                ← GitHub URL input + live repo preview
-│   │   │   └── RunDashboard.tsx          ← 5-tab results dashboard
-│   │   ├── App.tsx
-│   │   └── index.css                     ← Tailwind v4 + JetBrains Mono theme
-│   ├── vite.config.ts                    ← Vite + Tailwind v4 + proxy to :8000
-│   └── package.json
-│
-├── output/
-│   ├── dependency_exit_capsule.json
-│   └── dependency_exit_capsule.md
-│
-└── skills/
-    └── universal-maintainer/
-        ├── SKILL.md                      ← Agent Skills Open Standard metadata
-        ├── agents/
-        │   ├── inspector_agent.py        ← Phase 1: Deterministic inspector
-        │   ├── tree_sitter_inspector.py  ← Phase 1: Multi-language AST parser
-        │   ├── diagnostic_agent.py       ← Phase 2: CoV LLM diagnostic agent
-        │   ├── sandbox_agent.py          ← Phase 3: Sandbox + self-healing
-        │   ├── capsule_compiler.py       ← Phase 4: Schema validation + report
-        │   └── pr_agent.py              ← Phase 5: Git branch + GitHub PR
-        ├── prompts/
-        │   ├── diagnostic_prompt.py      ← Chain-of-Verification prompt builder
-        │   └── reflection_prompt.py      ← Self-healing reflection prompts
-        └── references/
-            └── exit_capsule_schema.json  ← JSON Schema specification
-```
+### Python Core Dependencies (
+equirements.txt)
+| Package | Version | Purpose |
+| :--- | :--- | :--- |
+| google-genai | >=0.8.0 | Official Google GenAI SDK for Gemini 2.5 Flash integration |
+| groq | >=0.4.0 | High-throughput Groq Cloud inference client |
+| pydantic | >=2.6.0 | Robust schema definition, serialization, and capsule validation |
+| pytest | >=8.0.0 | Test discovery and deterministic sandbox test execution |
+| gitpython | >=3.1.40 | Programmatic Git operations, diff calculation, and branch management |
+| python-dotenv | >=1.0.0 | Environment variable loading from root .env |
+| 
+ich | >=13.7.0 | Terminal formatting, tables, and progress visualization |
+| 
+equests | >=2.31.0 | HTTP client for Ollama local endpoints and external webhooks |
+| click | >=8.1.0 | CLI command construction and option parsing |
+
+### Python Backend Service Dependencies (ackend/requirements.txt)
+| Package | Version | Purpose |
+| :--- | :--- | :--- |
+| astAPI | >=0.110.0 | High-performance asynchronous REST API framework |
+| uvicorn | >=0.28.0 | ASGI production-grade web server |
+| pydantic | >=2.6.0 | Request and response model validation |
+| python-multipart| >=0.0.9 | Form data and file upload support |
+| sse-starlette | >=2.0.0 | Server-Sent Events (SSE) for streaming real-time run logs |
+
+### Frontend Dependencies (rontend/package.json)
+| Package | Version | Purpose |
+| :--- | :--- | :--- |
+| 
+eact | ^19.0.0 | UI component library |
+| 
+eact-dom | ^19.0.0 | React DOM renderer |
+| ite | ^6.0.0 | Next-generation frontend bundler and HMR server |
+| 	ypescript | ^5.6.0 | Strict type checking and interface contracts |
+| lucide-react | ^0.460.0 | Clean, modern iconography |
+| 	ailwindcss | ^3.4.0 | Utility-first styling framework |
 
 ---
 
-## 🛠️ Troubleshooting
+## 6. AI Model Details
 
-### `ModuleNotFoundError` on startup
-```powershell
-# Make sure the venv is activated
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
+UMA is built on an adaptable multi-model backend. Below are the complete specifications of the supported language models:
 
-### `UnicodeEncodeError` on Windows
-The CLI wraps stdout in UTF-8 automatically. If you still see this, run:
-```powershell
-$env:PYTHONIOENCODING = "utf-8"
-python main.py --repo ...
-```
+### Model 1: Google Gemini 2.5 Flash (Primary)
+| Field | Details |
+| :--- | :--- |
+| **Model Name** | Gemini 2.5 Flash |
+| **Model Version** | gemini-2.5-flash |
+| **Model Source** | Google DeepMind |
+| **Access Method** | Cloud REST API via official google-genai Python SDK using GEMINI_API_KEY |
+| **Applicable Model License / Usage Terms** | Google Generative AI Terms of Service / Google Cloud Platform License Agreement |
+| **Role of the Model in the Project** | **Primary Reasoning Engine**: Performs initial repo log inspection, executes Chain-of-Verification (CoV) failure triage, synthesizes candidate unified diffs, analyzes sandbox test tracebacks for self-healing, and compiles PR release notes. |
 
-### Gemini 503 / 429 (rate limit)
-The `DiagnosticAgent` has automatic exponential backoff (up to 4 retries). If it still fails, wait 60 seconds and retry, or switch to Groq:
-```ini
-# In .env — comment out GEMINI_API_KEY to force Groq fallback
-# GEMINI_API_KEY=...
-GROQ_API_KEY=gsk_...
-```
+### Model 2: Groq LLaMA 3.1 70B Versatile (Fallback 1)
+| Field | Details |
+| :--- | :--- |
+| **Model Name** | LLaMA 3.1 70B Versatile |
+| **Model Version** | llama-3.1-70b-versatile |
+| **Model Source** | Meta AI (weights) hosted on Groq LPU Inference Cloud |
+| **Access Method** | Cloud REST API via groq Python SDK using GROQ_API_KEY |
+| **Applicable Model License / Usage Terms** | Meta Llama 3.1 Community License & Groq Terms of Service |
+| **Role of the Model in the Project** | **High-Speed Secondary Fallback**: Deployed automatically when Gemini API quota is exhausted or latency-sensitive triage is requested. Conducts deep code reasoning and patch formatting. |
 
-### Frontend can't reach backend (`Network Error`)
-Ensure the backend is running on port 8000 **before** starting the frontend. The Vite dev server proxies `/runs` and `/health` to `localhost:8000`.
+### Model 3: Ollama LLaMA 3 8B (Fallback 2 / Offline)
+| Field | Details |
+| :--- | :--- |
+| **Model Name** | LLaMA 3 8B Instruct |
+| **Model Version** | llama3:8b |
+| **Model Source** | Meta AI (served locally via Ollama runtime) |
+| **Access Method** | Local HTTP REST endpoint (http://localhost:11434/api/generate) |
+| **Applicable Model License / Usage Terms** | Meta Llama 3 Community License |
+| **Role of the Model in the Project** | **Air-Gapped / Offline Fallback**: Allows complete repository inspection and basic patch synthesis without sending proprietary source code across external networks. |
 
-### Tree-Sitter language bindings missing
-```powershell
-pip install tree-sitter-python tree-sitter-javascript tree-sitter-typescript
-```
-
-### `git clone` fails (private repo or SSH)
-Use a local path instead:
-```powershell
-python main.py --repo C:\Users\you\my-local-project
-```
+### LLM Priority and Fallback Cascade
+`
+  [Pipeline Request]
+          |
+          v
+  +-----------------------+   Success
+  | Google Gemini 2.5     | -----------> [Patch Synthesis / CoV]
+  +-----------------------+
+          | (Quota Exceeded / Rate Limit / Auth Error)
+          v
+  +-----------------------+   Success
+  | Groq LLaMA 3.1 70B    | -----------> [Patch Synthesis / CoV]
+  +-----------------------+
+          | (Network Failure / No API Key)
+          v
+  +-----------------------+   Success
+  | Local Ollama LLaMA 3  | -----------> [Patch Synthesis / CoV]
+  +-----------------------+
+          | (Ollama Offline)
+          v
+  +-----------------------+
+  | Rule-Based Heuristics | -----------> [Static Diff / [UNVERIFIED] Tag]
+  +-----------------------+
+`
 
 ---
 
-## 🔒 Security Notes
+## 7. Known Limitations
 
-- **Never commit `.env`** — it is listed in `.gitignore` by default.
-- Your `GITHUB_TOKEN` only needs `repo` scope. Do not use tokens with `admin:org` or `delete_repo` permissions.
-- The sandbox agent never pushes to remote without explicit `[y/N]` user confirmation (or `--auto-pr` flag).
+While UMA introduces verifiable self-healing maintenance, users should be aware of the following design constraints and current limitations:
 
----
+### LLM & Diagnostic Limitations
+- **Multi-File Architectural Refactors**: UMA excels at localized repairs (1 to 5 related files). Broad cross-repository architectural migrations spanning dozens of modules can exceed context windows and degradation of patch coherence.
+- **Subtle Semantic Drift**: While patches pass the existing unit test suite, insufficient or missing test coverage in the target repo can allow semantic regressions to pass undetected into the [EXECUTED] tier.
+- **Complex Mocking Frameworks**: Highly intricate test suites relying on multi-tier network mocks or dynamic monkeypatching can occasionally cause the diagnostic agent to formulate incorrect verification hypotheses.
 
-## 📜 Standards & License
+### Sandbox & Execution Limitations
+- **OS Dependency Constraints**: The local sandbox executes tests within the host Python environment. Repositories requiring native C/C++ compilation, GPU drivers, or specific system packages must have those prerequisites pre-installed on the host.
+- **Long-Running Test Suites**: To prevent unbounded execution, sandbox runs enforce a default 60-second timeout. Test suites that normally take tens of minutes cannot complete without adjusting SANDBOX_TIMEOUT_SECONDS.
+- **Destructive Test Suites**: Repositories whose test suites drop databases or modify host filesystems should be executed inside dedicated containers (e.g. Docker) rather than directly on bare-metal workstations.
 
-This skill complies with the [Agent Skills Open Standard](https://agentskills.io) v1.0.0.  
-Compatible with Antigravity, Claude Code, Cursor, and any CLI-based AI coding agent.
+### Ecosystem & Language Support
+- **Python-Centric Testing**: The current sandbox test harness is natively optimized for pytest and unittest. Other language runtimes (Node.js/Jest, Go test, Rust cargo test) require adding custom test runner adapters.
+- **Dependency Isolation**: Sandbox runs share the virtual environment of the runner. Conflicting transitive dependencies in the target repo may require isolated venv cloning.
 
-**License:** MIT
+### Interactive PR Agent Limitations
+- **Automated Merge Conflicts**: The PR generator produces unified diffs based on the HEAD commit observed during inspection. If concurrent commits are pushed to the target branch during execution, git rebase conflicts must be manually resolved by developers.
