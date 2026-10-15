@@ -1,6 +1,6 @@
 // src/pages/Launch.tsx
 import { useState, useEffect } from 'react';
-import { Search, Zap, AlertTriangle, ChevronRight, Settings } from 'lucide-react';
+import { Search, Zap, AlertTriangle, ChevronRight } from 'lucide-react';
 import { createRun, fetchRepoMeta, type RunRequest, type RepoMeta } from '../api';
 import { RepoPreviewCard } from '../components/RepoPreviewCard';
 
@@ -10,16 +10,9 @@ interface LaunchProps {
   onRunCreated: (runId: string) => void;
 }
 
-const PROVIDERS = [
-  { value: 'gemini', label: 'Gemini 2.5 Flash', color: 'text-blue-400' },
-  { value: 'groq',   label: 'Groq llama-3.1-70b', color: 'text-purple-400' },
-  { value: 'ollama', label: 'Local Ollama', color: 'text-emerald-400' },
-  { value: 'auto',   label: 'Auto-Fallback', color: 'text-amber-400' },
-] as const;
-
 export function Launch({ onRunCreated }: LaunchProps) {
   const [url, setUrl]               = useState('https://github.com/rishrek/LinkWatch');
-  const [provider, setProvider]     = useState<RunRequest['provider']>('gemini');
+  const provider: RunRequest['provider'] = 'gemini';
   const [skipSandbox, setSkip]      = useState(true);
   const [repoMeta, setRepoMeta]     = useState<RepoMeta | null>(null);
   const [loading, setLoading]       = useState(false);
@@ -109,27 +102,7 @@ export function Launch({ onRunCreated }: LaunchProps) {
             </div>
 
             {/* Config */}
-            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wider font-medium block mb-2">
-                  <Settings size={10} className="inline mr-1" /> LLM Provider
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {PROVIDERS.map(p => (
-                    <button
-                      key={p.value}
-                      onClick={() => setProvider(p.value)}
-                      className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all
-                        ${provider === p.value
-                          ? 'bg-blue-950/60 border-blue-700 ' + p.color
-                          : 'bg-[#0d1117] border-[#30363d] text-gray-500 hover:border-gray-500'}`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
+            <div className="p-5">
               <div>
                 <label className="text-xs text-gray-400 uppercase tracking-wider font-medium block mb-2">
                   Execution Options
