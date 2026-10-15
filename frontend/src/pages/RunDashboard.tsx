@@ -1,7 +1,7 @@
 // src/pages/RunDashboard.tsx
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { subscribeToRun, getCapsule, type AgentEvent, type Capsule } from '../api';
+import { subscribeToRun, getCapsule, getRunStatus, type AgentEvent, type Capsule } from '../api';
 import { AgentStepper } from '../components/AgentStepper';
 import { LogConsole } from '../components/LogConsole';
 import { VerdictBanner } from '../components/VerdictBanner';
@@ -27,15 +27,31 @@ export function RunDashboard({ runId, onBack }: RunDashboardProps) {
   const unsubRef                = useRef<(() => void) | null>(null);
 
   useEffect(() => {
+    // Check if run is already completed
+    getRunStatus(runId).then(async (res) => {
+      if (res.status === 'completed' || res.capsule_ready) {
+        setDone(true);
+        try {
+          const c = await getCapsule(runId);
+          setCapsule(c);
+        } catch { /* ignore */ }
+      }
+    }).catch(() => {});
+
     const unsub = subscribeToRun(
       runId,
       (ev) => setEvents(prev => [...prev, ev]),
       async () => {
         setDone(true);
-        try {
-          const c = await getCapsule(runId);
-          setCapsule(c);
-        } catch { /* status page shows error */ }
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            const c = await getCapsule(runId);
+            setCapsule(c);
+            break;
+          } catch {
+            await new Promise(r => setTimeout(r, 600));
+          }
+        }
       },
     );
     unsubRef.current = unsub;
@@ -45,7 +61,19 @@ export function RunDashboard({ runId, onBack }: RunDashboardProps) {
   const isRunning = !done;
   const tests      = capsule?.executed_test_results;
   const risks      = capsule?.risk_indicators ?? [];
-  const patches    = capsule?.recommended_patches ?? [];
+  let patches      = capsule?.recommended_patches ?? [];
+  if (patches.length === 0 && capsule?.proposed_changes_or_maintenance_approach) {
+    const text = capsule.proposed_changes_or_maintenance_approach;
+    const diffMatch = text.match(/```diff\n([\s\S]*?)```/);
+    if (diffMatch) {
+      const fileMatch = text.match(/\[(.*?)\]/);
+      patches = [{
+        file: fileMatch ? fileMatch[1] : 'proposed_fix.patch',
+        description: text.split('```')[0].trim(),
+        unified_diff: diffMatch[1].trim(),
+      }];
+    }
+  }
   const syntaxErrors = events
     .filter(e => e.type === 'agent_update' && e.phase === '1' && e.data?.syntax_errors)
     .flatMap(e => (e.data!.syntax_errors as Array<{file_path:string;line_number:number;message:string}>) ?? []);

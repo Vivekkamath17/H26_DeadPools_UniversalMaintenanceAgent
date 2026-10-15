@@ -231,9 +231,13 @@ async def get_capsule(run_id: str) -> dict[str, Any]:
     if run_id not in _RUNS:
         raise HTTPException(status_code=404, detail="Run not found")
     run = _RUNS[run_id]
+    if run.get("capsule"):
+        return run["capsule"]
+    if run["status"] == "error":
+        raise HTTPException(status_code=500, detail="Run ended in error")
     if run["status"] not in ("completed",):
-        raise HTTPException(status_code=202, detail=f"Run status: {run['status']}")
-    return run["capsule"]
+        raise HTTPException(status_code=409, detail=f"Run status: {run['status']}")
+    raise HTTPException(status_code=404, detail="Capsule not found")
 
 
 @app.get("/runs/{run_id}/status")

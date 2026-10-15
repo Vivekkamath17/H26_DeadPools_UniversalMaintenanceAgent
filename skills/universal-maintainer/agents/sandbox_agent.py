@@ -81,8 +81,8 @@ class SandboxAgent:
 
     # Maps stack name → test command candidates (tried in order)
     _TEST_COMMANDS: dict[str, list[list[str]]] = {
-        "Python":  [["pytest", "--tb=short", "-q"],
-                    ["python", "-m", "pytest", "--tb=short", "-q"],
+        "Python":  [["python", "-m", "pytest", "--tb=short", "-q"],
+                    ["pytest", "--tb=short", "-q"],
                     ["python", "-m", "unittest", "discover"]],
         "NodeJS":  [["npm", "test", "--", "--watchAll=false"],
                     ["yarn", "test"],
@@ -113,6 +113,22 @@ class SandboxAgent:
         test_cmd = self._detect_test_command(stacks)
         result.test_command = " ".join(test_cmd) if test_cmd else "none"
 
+        # Ensure Python dependencies are present if requirements.txt exists
+        if "Python" in stacks:
+            req_file = self._repo_path / "requirements.txt"
+            if req_file.exists():
+                try:
+                    import sys
+                    log("Ensuring repository dependencies from requirements.txt …")
+                    subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "--quiet"],
+                        cwd=str(self._repo_path),
+                        capture_output=True,
+                        timeout=120,
+                    )
+                except Exception as exc:
+                    log(f"Warning: dependency install skipped/failed: {exc}", "yellow")
+
         current_diagnosis = diagnosis
 
         for attempt in range(1, MAX_RETRIES + 1):
@@ -132,7 +148,8 @@ class SandboxAgent:
                 return result
 
             log(f"Running: {result.test_command}")
-            stdout, stderr, rc = self._run_command(test_cmd)
+            stdout, stderr, rc = self._run_pytest_robust(test_cmd)
+
             result.stdout    = stdout
             result.stderr    = stderr
             result.exit_code = rc
@@ -277,6 +294,114 @@ class SandboxAgent:
             log(f"Python diff applicator failed: {exc}", "red")
             return False
 
+    # ── Robust pytest runner ─────────────────────────────────────────────────
+
+    def _run_pytest_robust(self, initial_cmd: list[str]) -> tuple[str, str, int]:
+        """
+        Run pytest with a progressive fallback chain to handle:
+          1. Broken global pytest plugins (e.g. langsmith pydantic v1/v2 clash)
+          2. pyproject.toml parse errors (exit code 4 / iniconfig error)
+          3. Missing package dependencies
+        Returns (stdout, stderr, returncode).
+        """
+        import sys
+
+        is_pytest = "pytest" in " ".join(initial_cmd)
+        if not is_pytest:
+            return self._run_command(initial_cmd)
+
+        tests_dir = self._repo_path / "tests"
+        test_path  = "tests" if tests_dir.exists() else "."
+
+        # Shared flags that are safe across all fallbacks
+        base_flags = ["--tb=short", "-q", "--no-header"]
+
+        # Discover which third-party pytest plugins are broken (non-zero load)
+        broken_plugins = self._probe_broken_plugins()
+        no_plugin_flags = []
+        for p in broken_plugins:
+            no_plugin_flags += ["-p", f"no:{p}"]
+
+        # Fallback chain – each tuple is (description, command)
+        exe = sys.executable
+        fallbacks: list[tuple[str, list[str]]] = [
+            # 1. Standard run with broken plugins disabled
+            ("std+no-broken-plugins",
+             [exe, "-m", "pytest", test_path] + no_plugin_flags + base_flags),
+            # 2. Isolate test dir only, disable all third-party auto-discovery
+            ("tests-dir+no-autoload",
+             [exe, "-m", "pytest", test_path, "-p", "no:cacheprovider"]
+             + no_plugin_flags + base_flags),
+            # 3. Nuke ini config (for pyproject.toml TOML parse errors)
+            ("no-ini+tests-dir",
+             [exe, "-m", "pytest", test_path,
+              "--override-ini=python_files=test_*.py",
+              "--override-ini=python_classes=Test",
+              "--override-ini=python_functions=test_"]
+             + no_plugin_flags + base_flags),
+            # 4. Last resort – subprocess with PYTEST_DISABLE_PLUGIN_AUTOLOAD
+            ("env-disable-autoload+tests-dir",
+             [exe, "-m", "pytest", test_path] + base_flags),
+        ]
+
+        last_out, last_err, last_rc = "", "", -1
+
+        for desc, cmd in fallbacks:
+            env = None
+            if desc.startswith("env-disable"):
+                import copy
+                env = copy.copy(os.environ)
+                # Prevent auto-loading all setuptools entry_points plugins
+                env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+
+            log(f"Pytest fallback [{desc}]: {' '.join(cmd)}")
+            out, err, rc = self._run_command(cmd, extra_env=env)
+            last_out, last_err, last_rc = out, err, rc
+
+            # rc==0 → success; rc==1 → tests ran but some failed (not infra error)
+            if rc in (0, 1):
+                log(f"Pytest succeeded with [{desc}] (rc={rc})", "green" if rc == 0 else "yellow")
+                return out, err, rc
+
+            combined = (out + err).lower()
+            # Infrastructure failures → try next fallback
+            infra_fail = (
+                rc == 4
+                or "error during collection" in combined
+                or "pluginmanager" in combined
+                or "plugin" in combined
+                or "toml" in combined
+                or "iniconfig" in combined
+                or "forwardref" in combined
+            )
+            if not infra_fail:
+                # Real test failure – no point in trying other configs
+                log(f"Real test failure (rc={rc}) – no more fallbacks needed.", "yellow")
+                break
+
+            log(f"Infrastructure failure with [{desc}] (rc={rc}) – trying next fallback …", "yellow")
+
+        return last_out, last_err, last_rc
+
+    def _probe_broken_plugins(self) -> list[str]:
+        """
+        Discover all registered pytest11 entry-points and test-load each one.
+        Returns a list of entry-point *names* (suitable for -p no:<name>) that
+        crash on import, so they can be disabled during sandbox test runs.
+        """
+        import importlib.metadata
+        broken: list[str] = []
+        try:
+            eps = importlib.metadata.entry_points(group="pytest11")
+        except Exception:
+            return broken
+        for ep in eps:
+            try:
+                ep.load()
+            except Exception:
+                broken.append(ep.name)
+        return broken
+
     # ── Test command detection ───────────────────────────────────────────────
 
     def _detect_test_command(self, stacks: list[str]) -> list[str]:
@@ -317,9 +442,11 @@ class SandboxAgent:
         self,
         cmd: list[str],
         timeout: int = 300,
+        extra_env: dict | None = None,
     ) -> tuple[str, str, int]:
         """Run command in repo_path, return (stdout, stderr, returncode)."""
         try:
+            env = extra_env if extra_env is not None else None
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(self._repo_path),
@@ -328,6 +455,7 @@ class SandboxAgent:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                env=env,
             )
             stdout, stderr = proc.communicate(timeout=timeout)
             return stdout, stderr, proc.returncode

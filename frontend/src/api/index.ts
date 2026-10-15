@@ -72,7 +72,11 @@ export async function createRun(req: RunRequest): Promise<RunCreated> {
 export async function getCapsule(runId: string): Promise<Capsule> {
   const res = await fetch(`${API_BASE}/runs/${runId}/capsule`);
   if (!res.ok) throw new Error(`Capsule not ready: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (!data || data.detail || !data.maintenance_problem_identified) {
+    throw new Error(data?.detail || 'Capsule not ready');
+  }
+  return data;
 }
 
 export async function getRunStatus(runId: string): Promise<{

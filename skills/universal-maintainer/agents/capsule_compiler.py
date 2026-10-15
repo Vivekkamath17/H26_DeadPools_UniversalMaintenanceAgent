@@ -154,6 +154,8 @@ class CapsuleCompiler:
             "executed_test_results":               executed_tests,
             "compatibility_or_maintenance_gaps":   compatibility_gaps,
             "unresolved_concerns_and_limitations": unresolved,
+            "recommended_patches":                 patches,
+            "cov_log":                             diag_dict.get("cov_verification_log", ""),
             # Extra metadata (not in schema – won't break validation)
             "_meta": {
                 "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
