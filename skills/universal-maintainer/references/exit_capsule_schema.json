@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DependencyExitCapsule",
+  "type": "object",
+  "required": [
+    "maintenance_problem_identified",
+    "relevant_dependency_or_repo_details",
+    "risk_indicators",
+    "usage_locations",
+    "ai_generated_analysis_or_recommendations",
+    "proposed_changes_or_maintenance_approach",
+    "suggested_tests_or_verification_steps",
+    "executed_test_results",
+    "compatibility_or_maintenance_gaps",
+    "unresolved_concerns_and_limitations"
+  ],
+  "properties": {
+    "maintenance_problem_identified": { "type": "string" },
+    "relevant_dependency_or_repo_details": { "type": "object" },
+    "risk_indicators": { "type": "array", "items": { "type": "string" } },
+    "usage_locations": { "type": "array", "items": { "type": "string" } },
+    "ai_generated_analysis_or_recommendations": { "type": "string" },
+    "proposed_changes_or_maintenance_approach": { "type": "string" },
+    "suggested_tests_or_verification_steps": { "type": "array", "items": { "type": "string" } },
+    "executed_test_results": { "type": "object" },
+    "compatibility_or_maintenance_gaps": { "type": "array", "items": { "type": "string" } },
+    "unresolved_concerns_and_limitations": { "type": "array", "items": { "type": "string" } }
+  }
+}
